@@ -28,6 +28,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Locale;
 
 public class IndexHelper extends org.citydb.database.util.IndexHelper {
     private final Logger logger = LoggerFactory.getLogger(IndexHelper.class);
@@ -38,14 +39,11 @@ public class IndexHelper extends org.citydb.database.util.IndexHelper {
 
     @Override
     protected void createIndex(Index index, boolean ignoreNulls, Connection connection) throws SQLException {
-        // TODO semantic-review: ported from former SchemaAdapter.getCreateIndex(). Oracle has no
-        // "create index if not exists"; the base IndexHelper already guards with exists() before
-        // calling this, so the clause is harmless but should be revisited.
         // ignoreNulls is intentionally not applied: Oracle does not index null values by default.
-        String sql = "create index if not exists " + SchemaAdapter.enquoteSqlName(index.getName()) +
-                " on " + SchemaAdapter.enquoteSqlName(adapter.getConnectionDetails().getSchema()) + "." +
-                SchemaAdapter.enquoteSqlName(index.getTable()) +
-                "(" + String.join(", ", SchemaAdapter.enquoteSqlNames(index.getColumns())) + ")" +
+        String sql = "create index if not exists " + index.getName() +
+                " on " + adapter.getConnectionDetails().getSchema() + "." +
+                index.getTable() +
+                "(" + String.join(", ", index.getColumns()) + ")" +
                 (index.getType() == Index.Type.SPATIAL ? " INDEXTYPE IS MDSYS.SPATIAL_INDEX_V2 " : " ");
         logger.debug("createIndex: " + sql);
 
@@ -56,11 +54,9 @@ public class IndexHelper extends org.citydb.database.util.IndexHelper {
 
     @Override
     protected void dropIndex(Index index, Connection connection) throws SQLException {
-        // TODO semantic-review: ported from former SchemaAdapter.getDropIndex(); "drop index if exists"
-        // is not supported on older Oracle releases. The base IndexHelper guards with exists() first.
         String sql = "drop index if exists " +
-                SchemaAdapter.enquoteSqlName(adapter.getConnectionDetails().getSchema()) + "." +
-                SchemaAdapter.enquoteSqlName(index.getName());
+                adapter.getConnectionDetails().getSchema() + "." +
+                index.getName();
         logger.debug("dropIndex: " + sql);
 
         try (Statement stmt = connection.createStatement()) {
@@ -70,13 +66,12 @@ public class IndexHelper extends org.citydb.database.util.IndexHelper {
 
     @Override
     protected boolean indexExists(Index index, Connection connection) throws SQLException {
-        // TODO semantic-review: ported from former SchemaAdapter.getIndexExists(). The original wrapped
-        // owner/index_name with enquoteSqlName() inside single-quoted literals, which yields double-quoted
-        // values; this likely needs the plain (upper-cased) identifier instead.
+        // Oracle stores unquoted identifiers upper-cased in the data dictionary, so match on the
+        // upper-cased owner/index name.
         String sql = "select 1 " +
                 " from all_indexes " +
-                " where owner = '" + SchemaAdapter.enquoteSqlName(adapter.getConnectionDetails().getSchema()) + "' " +
-                " and index_name = '" + SchemaAdapter.enquoteSqlName(index.getName()) +
+                " where owner = '" + adapter.getConnectionDetails().getSchema().toUpperCase(Locale.ROOT) + "' " +
+                " and index_name = '" + index.getName().toUpperCase(Locale.ROOT) +
                 "' and rownum = 1";
         logger.debug("indexExists: " + sql);
 
